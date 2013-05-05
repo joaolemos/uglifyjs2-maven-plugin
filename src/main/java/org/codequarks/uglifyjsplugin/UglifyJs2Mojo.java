@@ -16,11 +16,15 @@ package org.codequarks.uglifyjsplugin;
  * limitations under the License.
  */
 
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.TrueFileFilter;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 
 /**
  * Goal which touches a timestamp file.
@@ -30,6 +34,7 @@ import java.util.ArrayList;
  * @phase prepare-package
  */
 public class UglifyJs2Mojo extends AbstractMojo {
+
 	/**
 	 * Source directory of the JavaScript files
 	 * 
@@ -37,7 +42,7 @@ public class UglifyJs2Mojo extends AbstractMojo {
 	 * @required
 	 */
 	private File jsSourceDir;
-	
+
 	/**
 	 * Output directory for the minified JavaScript files.
 	 * 
@@ -45,23 +50,35 @@ public class UglifyJs2Mojo extends AbstractMojo {
 	 * @required
 	 */
 	private File jsOutputDir;
-	
-	
+
 	/**
-	* Files/folders to exclude from minification
-	*
-	* @parameter expression="${jsExcludes}" alias="resources"
-	*/
+	 * Files/folders to exclude from minification
+	 * 
+	 * @parameter expression="${jsExcludes}" alias="resources"
+	 */
 	private ArrayList<String> jsExcludes;
 
 	public void execute() throws MojoExecutionException {
-	
-		getLog().info(jsSourceDir.getAbsolutePath());
-		
-		getLog().info(jsOutputDir.getAbsolutePath());
-		
-		for(String jsExclude : jsExcludes) {
-			getLog().info(jsExclude);
+		JsFileFilter jsFileFilter = new JsFileFilter(jsExcludes);
+		Collection<File> jsFiles = FileUtils.listFiles(jsSourceDir,
+				jsFileFilter, TrueFileFilter.INSTANCE);
+		for (File file : jsFiles) {
+			try {
+				Runtime rt = Runtime.getRuntime();
+				String command = "uglifyjs " + file.getPath() + " -o " + this.getOutputFile(file).getPath();
+				getLog().info("Minimizing " + file.getName() + "...");
+				rt.exec(command);
+			 } catch (IOException e) { 
+				 throw new MojoExecutionException("Failed to execute uglifyjs process", e);
+			 }
 		}
+	}
+
+	private final File getOutputFile(File inputFile) throws IOException {
+		String relativePath = jsSourceDir.toURI().relativize(inputFile.getParentFile().toURI()).getPath();
+		File outputBaseDir = new File(jsOutputDir, relativePath);
+		if (!outputBaseDir.exists())
+			FileUtils.forceMkdir(outputBaseDir);
+		return new File(outputBaseDir, inputFile.getName());
 	}
 }
